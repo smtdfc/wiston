@@ -5,25 +5,38 @@ import (
 	"sync"
 )
 
+// GatewayType defines the type of a gateway, such as HTTP or WebSocket.
 type GatewayType int
 
 const (
+	// HTTP_GATEWAY represents an HTTP server gateway.
 	HTTP_GATEWAY GatewayType = iota
+	// WS_GATEWAY represents a WebSocket server gateway.
 	WS_GATEWAY
 )
 
+// Gateway is the fundamental interface for network gateways.
+// It defines the basic methods that all gateway types must implement.
 type Gateway interface {
+	// GetType returns the specific type of the gateway.
 	GetType() GatewayType
+	// SetApp associates the main application instance with the gateway.
 	SetApp(app *App) error
+	// Start launches the gateway, making it ready to accept connections.
 	Start() error
 }
 
+// HttpGateway defines the interface for an HTTP gateway, extending the base Gateway.
+// It provides methods for middleware and creating routing scopes.
 type HttpGateway interface {
 	Gateway
+	// Use applies one or more middleware handlers to the gateway.
 	Use(mw ...HttpHandler)
+	// CreateScope creates a new routing scope for a specific module under a given prefix.
 	CreateScope(module *Module, prefix string) HttpScope
 }
 
+// HttpStatus provides a convenient struct for accessing standard HTTP status codes.
 var HttpStatus = struct {
 	OK                  int
 	Created             int
@@ -58,7 +71,10 @@ var HttpStatus = struct {
 	GatewayTimeout:      http.StatusGatewayTimeout,
 }
 
+// HttpContext defines the interface for the context of an HTTP request.
+// It provides methods to access request data and to write a response.
 type HttpContext interface {
+	// Request methods
 	Method() string
 	Path() string
 	Protocol() string
@@ -72,6 +88,7 @@ type HttpContext interface {
 	FormValue(key string) string
 	FormFile(name string) ([]byte, error)
 
+	// Response methods
 	Status(code int) HttpContext
 	SetHeader(key, value string) HttpContext
 	SetCookie(name, value string, options ...any) HttpContext
@@ -82,17 +99,22 @@ type HttpContext interface {
 	Blob(code int, contentType string, data []byte) HttpContext
 	File(code int, filepath string) HttpContext
 
+	// Flow control methods
 	Next() HttpContext
 	Abort() HttpContext
 	IsAborted() bool
 
+	// Data sharing methods
 	Set(key string, value any) HttpContext
 	Get(key string) any
 	MustGet(key string) any
 }
 
+// HttpHandler defines the function signature for handling HTTP requests.
 type HttpHandler func(HttpContext)
 
+// HttpScope provides an interface for defining a group of routes
+// under a common path prefix and with shared middleware.
 type HttpScope interface {
 	Use(mw ...HttpHandler)
 	SetLogger(logger *Logger)
@@ -107,6 +129,8 @@ type HttpScope interface {
 	Trace(path string, handlers ...HttpHandler)
 }
 
+// WsContext defines the interface for the context of a WebSocket event.
+// It provides methods for interacting with clients, rooms, and event data.
 type WsContext interface {
 	GetData() any
 	GetEvent() string
@@ -121,13 +145,18 @@ type WsContext interface {
 	Emit(event string, data any) error
 }
 
+// WsHandler defines the function signature for handling WebSocket events.
 type WsHandler func(WsContext)
 
+// WsNamespace provides an interface for defining a logical grouping
+// of WebSocket event handlers.
 type WsNamespace interface {
 	SetLogger(logger *Logger)
 	On(event string, handlers ...WsHandler)
 }
 
+// WsGateway defines the interface for a WebSocket gateway, extending the base Gateway.
+// It provides methods for broadcasting messages and managing rooms and namespaces.
 type WsGateway interface {
 	Gateway
 	GetAllRoom() []string
@@ -137,20 +166,22 @@ type WsGateway interface {
 	CreateNamespace(module *Module, name string) WsNamespace
 }
 
+// GatewayManager manages the lifecycle of all registered gateways within an application.
 type GatewayManager struct {
 	App     *App
 	Gateway map[GatewayType]Gateway
 }
 
-// UseGateway registers a new Gateway with the manager.
+// UseGateway registers a new Gateway with the manager and associates it with the app.
 func (g *GatewayManager) UseGateway(gateway Gateway) {
 	gt := gateway.GetType()
 	g.Gateway[gt] = gateway
 	gateway.SetApp(g.App)
 }
 
-// StartAll launches all registered gateways concurrently and returns a WaitGroup that can be used to wait for them to stop.
-func (g *GatewayManager) StartAll() sync.WaitGroup {
+// StartAll launches all registered gateways concurrently.
+// It returns a sync.WaitGroup that callers can use to wait for all gateways to stop.
+func (g *GatewayManager) StartAll() *sync.WaitGroup {
 	var wg sync.WaitGroup
 	if g.Gateway[HTTP_GATEWAY] != nil {
 		httpGateway := g.Gateway[HTTP_GATEWAY]
@@ -178,5 +209,5 @@ func (g *GatewayManager) StartAll() sync.WaitGroup {
 		}()
 	}
 
-	return wg
+	return &wg
 }
