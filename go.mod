@@ -1,3 +1,3 @@
-module github.com/smtdfc/wison
+module github.com/smtdfc/wiston
 
 go 1.25.1
